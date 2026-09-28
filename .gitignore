@@ -152,8 +152,11 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
-# Generated OpenAPI artifacts — produced by `npm run openapi:export`
-docs/openapi.json
+# Generated OpenAPI artifacts — produced by `npm run openapi:export`.
+# `docs/openapi.json` is intentionally NOT ignored: it is the committed contract
+# baseline that `scripts/check-openapi-drift.ts` diffs the live controller
+# decorators against in CI. Regenerate it with `npm run openapi:export` and
+# commit it whenever the API surface changes.
 
 # Generated TypeScript client — produced by `npm run openapi:client`
 client/
