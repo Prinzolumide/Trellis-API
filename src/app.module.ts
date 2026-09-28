@@ -64,6 +64,8 @@ import { PaymentsModule } from "./payments/payments.module";
 import { PaymentOperation } from "./payments/entities/payment-operation.entity";
 // Modules – integration sandbox mode (deterministic fakes; opt-in)
 import { SandboxModule } from "./sandbox/sandbox.module";
+// Modules – deterministic transaction preflight (issue #109)
+import { PreflightModule } from "./preflight/preflight.module";
 import { RateLimitingModule } from "./rate-limiting/rate-limiting.module";
 import { ReconciliationModule } from "./reconciliation/reconciliation.module";
 import { SoftDeleteCascadeSubscriber } from "./common/database/subscribers/soft-delete-cascade.subscriber";
@@ -373,6 +375,7 @@ import { InvariantReportEntity } from "./monitoring/invariant-monitor/entities/i
     BillingModule,
     PaymentsModule,
     SandboxModule,
+    PreflightModule,
     ReconciliationModule,
     NotificationModule,
     DisasterRecoveryModule,
