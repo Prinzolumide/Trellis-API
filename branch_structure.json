@@ -1,0 +1,21 @@
+{
+  "default_branch": "main",
+  "branches": [
+    "cloud-fixer/109-preflight",
+    "cloud-fixer/148-openapi-drift",
+    "main",
+    "origin"
+  ],
+  "parent": {
+    "cloud-fixer/109-preflight": "main",
+    "cloud-fixer/148-openapi-drift": "main",
+    "main": null,
+    "origin": "main"
+  },
+  "order": [
+    "main",
+    "cloud-fixer/109-preflight",
+    "cloud-fixer/148-openapi-drift",
+    "origin"
+  ]
+}
