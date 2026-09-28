@@ -53,6 +53,40 @@ jobs:
       - name: Build project
         run: npm run build
 
+  openapi-drift:
+    name: Check OpenAPI contract drift
+    runs-on: ubuntu-latest
+    # Runs on pull requests as well as pushes: a controller change that was not
+    # re-exported must fail the pull request instead of silently publishing a
+    # stale contract to SDK generators and the Redoc reference.
+    env:
+      NODE_ENV: development
+      # Same offline bootstrap env the `openapi` job uses: the export path boots
+      # with abortOnError:false so it tolerates the absence of a real database.
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/openapi_drift
+      JWT_SECRET: ci-openapi-drift-secret
+      PORT: 3001
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test the OpenAPI drift comparison logic
+        run: npm test -- --runInBand src/common/contract/openapi-drift.spec.ts
+
+      # docs/openapi.json is the committed contract baseline. A missing, empty or
+      # unparseable artefact fails this step on purpose (and prints the export
+      # command to run) - do not add continue-on-error here.
+      - name: Check OpenAPI spec drift
+        run: npx ts-node -r tsconfig-paths/register scripts/check-openapi-drift.ts
+
   openapi:
     name: Generate OpenAPI Spec & SDKs (TypeScript + Python)
     runs-on: ubuntu-latest
