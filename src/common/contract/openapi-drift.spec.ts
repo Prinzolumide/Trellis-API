@@ -316,7 +316,7 @@ describe("OpenAPI contract drift comparison", () => {
       const message = formatExpectedArtifactProblem(loaded);
       expect(message).toContain(OPENAPI_EXPORT_COMMAND);
       expect(message).toContain(`git add ${DEFAULT_OPENAPI_ARTIFACT}`);
-      expect(message).toContain("does not have one");
+      expect(message).toContain("cannot pass without one");
       expect(message).not.toContain("in sync");
     });
 
