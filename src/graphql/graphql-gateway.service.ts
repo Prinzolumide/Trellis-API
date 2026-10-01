@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable, Optional } from "@nestjs/common";
 import {
   execute,
   ExecutionResult,
@@ -49,7 +49,7 @@ export class GraphqlGatewayService {
   constructor(
     private readonly reviewsService: AgentReviewsService,
     private readonly userService: UserService,
-    options?: { maxDepth?: number; maxComplexity?: number },
+    @Optional() options?: { maxDepth?: number; maxComplexity?: number },
   ) {
     this.maxDepth = options?.maxDepth ?? 6;
     this.maxComplexity = options?.maxComplexity ?? 100;

@@ -156,8 +156,10 @@ import { ReferralFraudService } from "src/growth/referral/referral-fraud.service
     OAuthStrategy,
     ApiKeyStrategy,
     StrategyAuthGuard,
+    AdminTwoFactorGuard,
     GrantfoxOAuthService,
     ImpersonationService,
+    TypeOrmModule,
   ],
 })
 export class AuthModule implements OnModuleInit {

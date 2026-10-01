@@ -83,7 +83,9 @@ export class EnvironmentVariables {
   @IsOptional()
   @Matches(
     /^$|^([a-z]+:\/\/)(\*\.)?[a-z0-9.-]+(:\d{1,5})?(,([a-z]+:\/\/)(\*\.)?[a-z0-9.-]+(:\d{1,5})?)*$/i,
-    { message: "CORS_ALLOWED_ORIGINS must be a comma-separated list of origins" },
+    {
+      message: "CORS_ALLOWED_ORIGINS must be a comma-separated list of origins",
+    },
   )
   CORS_ALLOWED_ORIGINS?: string;
 
@@ -673,6 +675,45 @@ export class EnvironmentVariables {
   @IsOptional()
   @IsString()
   STELLAR_HORIZON_URL?: string;
+
+  /**
+   * Comma-separated fallback Horizon endpoints (issue #160), tried in order
+   * when the primary fails or exceeds the timeout. Example:
+   * "https://horizon-fallback.stellar.example,https://horizon.example.org".
+   */
+  @IsOptional()
+  @IsString()
+  STELLAR_HORIZON_FALLBACK_URLS?: string;
+
+  /** Per-attempt Horizon request timeout in ms. Default: 5000 (issue #160). */
+  @IsOptional()
+  @IsNumber()
+  @Min(100)
+  @Transform(({ value }) => (value ? parseInt(value, 10) : 5000))
+  STELLAR_HORIZON_TIMEOUT_MS?: number = 5000;
+
+  /** Max attempts (retries + failover) per Horizon request. Default: 2. */
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  @Transform(({ value }) => (value ? parseInt(value, 10) : 2))
+  STELLAR_HORIZON_MAX_RETRIES?: number = 2;
+
+  /** Base delay in ms for exponential backoff between attempts. Default: 100. */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Transform(({ value }) =>
+    value !== undefined && value !== "" ? parseInt(value, 10) : 100,
+  )
+  STELLAR_HORIZON_BACKOFF_BASE_MS?: number = 100;
+
+  /** How long a failed Horizon node is skipped before being retried, in ms. Default: 60000. */
+  @IsOptional()
+  @IsNumber()
+  @Min(1000)
+  @Transform(({ value }) => (value ? parseInt(value, 10) : 60000))
+  STELLAR_HORIZON_HEALTH_TTL_MS?: number = 60000;
 
   /** Stellar network passphrase. Default: testnet passphrase. */
   @IsOptional()

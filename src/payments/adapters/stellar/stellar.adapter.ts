@@ -31,7 +31,10 @@ import {
   SignedTransaction,
   SubmittedTransaction,
 } from "../../interfaces/payment-processor.interface";
-import { STELLAR_HORIZON_SERVER, STELLAR_PROCESSOR_NAME } from "./stellar.constants";
+import {
+  STELLAR_HORIZON_SERVER,
+  STELLAR_PROCESSOR_NAME,
+} from "./stellar.constants";
 
 /** Config accepted by {@link StellarAdapter.initialize}. */
 export interface StellarConfig {
@@ -195,7 +198,7 @@ export class StellarAdapter implements IPaymentProcessor<
       signed.signedPayload,
       this.networkPassphrase,
     );
-    return transaction.hash().toString("hex");
+    return Buffer.from(transaction.hash()).toString("hex");
   }
 
   matchesCreatedPayment(
@@ -214,7 +217,10 @@ export class StellarAdapter implements IPaymentProcessor<
         signed.signedPayload,
         this.networkPassphrase,
       );
-      return unsigned.hash().toString("hex") === submitted.hash().toString("hex");
+      return (
+        Buffer.from(unsigned.hash()).toString("hex") ===
+        Buffer.from(submitted.hash()).toString("hex")
+      );
     } catch {
       return false;
     }

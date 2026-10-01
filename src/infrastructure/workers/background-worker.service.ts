@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { InjectQueue } from "@nestjs/bull";
 import { Queue } from "bull";
+import { JobStatus, JobPriority, WorkerJob, RetryPolicy, DEFAULT_RETRY_POLICY, WorkerJobPayload } from "./worker.interface";
 import { JobStatus, WorkerJob, RetryPolicy, DEFAULT_RETRY_POLICY, WorkerJobPayload, JobPriority } from "./worker.interface";
 import {
   withTraceContext,
@@ -165,6 +166,10 @@ export class BackgroundWorkerService implements OnModuleInit {
       return false;
     }
 
+    const bullJob = await this.queue.getJob(job.id);
+    if (bullJob) {
+      await bullJob.remove();
+    }
     await (this.queue as any).remove(job.id);
     job.status = JobStatus.FAILED;
     job.updatedAt = new Date();

@@ -111,7 +111,9 @@ function createClusterClient(
 ): Cluster {
   const client = new Cluster(clusterNodes, {
     ...getDefaultOptions(label),
-    password: process.env.REDIS_PASSWORD,
+    redisOptions: {
+      password: process.env.REDIS_PASSWORD,
+    },
     dnsLookup: (address: string, callback: Function) => {
       // Use DNS resolution for better reliability
       require("dns").lookup(address, callback);

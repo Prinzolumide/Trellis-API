@@ -1,11 +1,19 @@
 import { Test, TestingModule } from "@nestjs/testing";
+import { BadRequestException } from "@nestjs/common";
 import { Keypair, Account } from "@stellar/stellar-sdk";
-import { TradingTransactionService, TradeRequest } from "./trading-transaction.service";
+import {
+  TradingTransactionService,
+  TradeRequest,
+  calculateMinAcceptableOutput,
+} from "./trading-transaction.service";
 
 describe("TradingTransactionService", () => {
   let service: TradingTransactionService;
   const validSecretKey = Keypair.random().secret();
-  const mockAccount = new Account(Keypair.fromSecret(validSecretKey).publicKey(), "100");
+  const mockAccount = new Account(
+    Keypair.fromSecret(validSecretKey).publicKey(),
+    "100",
+  );
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -117,7 +125,9 @@ describe("TradingTransactionService", () => {
 
     it("should distinguish network error failure mode", async () => {
       const mockHorizonServer: any = {
-        loadAccount: jest.fn().mockRejectedValue(new Error("Network connection refused")),
+        loadAccount: jest
+          .fn()
+          .mockRejectedValue(new Error("Network connection refused")),
       };
       service.setHorizonServer(mockHorizonServer);
 
@@ -138,11 +148,198 @@ describe("TradingTransactionService", () => {
     });
   });
 
+  describe("slippage protection (issue #166)", () => {
+    it("calculateMinAcceptableOutput implements minOutput = expectedOutput * (1 - slippage)", () => {
+      expect(calculateMinAcceptableOutput(1000, 0.005)).toBeCloseTo(995);
+      expect(calculateMinAcceptableOutput(1000, 0)).toBe(1000);
+      expect(calculateMinAcceptableOutput(0.1, 0.02)).toBeCloseTo(0.098);
+    });
+
+    it("honours maxSlippagePercent expressed in percent (0.5 = 0.5%)", async () => {
+      const request: TradeRequest = {
+        portfolioId: "p-166",
+        ticker: "XLM",
+        action: "buy",
+        quantity: 1000,
+        price: 0.1,
+        actualPrice: 0.1006, // 0.6% drift > 0.5% tolerance
+        maxSlippagePercent: 0.5,
+      };
+
+      const result = await service.processTrade(request);
+
+      expect(result.success).toBe(false);
+      expect(result.status).toBe("FAILED");
+      expect(result.errorReason).toBe("SLIPPAGE_EXCEEDED");
+    });
+
+    it("accepts drift inside the maxSlippagePercent tolerance and reports minOutput", async () => {
+      const request: TradeRequest = {
+        portfolioId: "p-166",
+        ticker: "XLM",
+        action: "buy",
+        quantity: 1000,
+        price: 0.1,
+        actualPrice: 0.1004, // 0.4% drift < 0.5% tolerance
+        maxSlippagePercent: 0.5,
+        clientRequestId: "slip-ok-1",
+      };
+
+      const result = await service.processTrade(request);
+
+      expect(result.success).toBe(true);
+      // expectedOutput = 1000 * 0.1004 = 100.4; minOutput = 100.4 * (1 - 0.005)
+      expect(result.minAcceptableOutput).toBeCloseTo(100.4 * 0.995, 6);
+    });
+
+    it("maxSlippagePercent takes precedence over slippageTolerance when both are set", async () => {
+      const request: TradeRequest = {
+        portfolioId: "p-166",
+        ticker: "XLM",
+        action: "buy",
+        quantity: 100,
+        price: 0.1,
+        actualPrice: 0.105, // 5% drift: inside 10% legacy tolerance, outside 1% new one
+        slippageTolerance: 0.1,
+        maxSlippagePercent: 1,
+      };
+
+      const result = await service.processTrade(request);
+
+      expect(result.success).toBe(false);
+      expect(result.errorReason).toBe("SLIPPAGE_EXCEEDED");
+    });
+
+    it("rejects invalid maxSlippagePercent values", async () => {
+      for (const bad of [-1, 100, 150, Number.NaN]) {
+        await expect(
+          service.processTrade({
+            portfolioId: "p-166",
+            ticker: "XLM",
+            action: "buy",
+            quantity: 1,
+            price: 0.1,
+            maxSlippagePercent: bad,
+          }),
+        ).rejects.toBeInstanceOf(BadRequestException);
+      }
+    });
+  });
+
+  describe("transaction deadline enforcement (issue #166)", () => {
+    it("rejects a trade whose execution time is past the deadline before submission", async () => {
+      const mockHorizonServer: any = {
+        loadAccount: jest.fn(),
+        submitTransaction: jest.fn(),
+      };
+      service.setHorizonServer(mockHorizonServer);
+
+      const result = await service.processTrade({
+        portfolioId: "p-166",
+        ticker: "XLM",
+        action: "buy",
+        quantity: 10,
+        price: 0.1,
+        sourceSecret: validSecretKey,
+        deadlineTimestamp: Date.now() - 1000, // expired one second ago
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.status).toBe("FAILED");
+      expect(result.errorReason).toBe("DEADLINE_EXCEEDED");
+      // No side effect may have happened.
+      expect(mockHorizonServer.loadAccount).not.toHaveBeenCalled();
+      expect(mockHorizonServer.submitTransaction).not.toHaveBeenCalled();
+    });
+
+    it("accepts ISO deadline strings that are still in the future", async () => {
+      const result = await service.processTrade({
+        portfolioId: "p-166",
+        ticker: "XLM",
+        action: "buy",
+        quantity: 10,
+        price: 0.1,
+        deadlineTimestamp: new Date(Date.now() + 60_000).toISOString(),
+        clientRequestId: "deadline-ok-1",
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.status).toBe("CONFIRMED");
+    });
+
+    it("rejects unparseable deadline values with a clear error", async () => {
+      await expect(
+        service.processTrade({
+          portfolioId: "p-166",
+          ticker: "XLM",
+          action: "buy",
+          quantity: 10,
+          price: 0.1,
+          deadlineTimestamp: "not-a-timestamp",
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it("tightens the on-chain timeout so the transaction cannot outlive the deadline", async () => {
+      const captured: any[] = [];
+      const mockHorizonServer: any = {
+        loadAccount: jest.fn().mockResolvedValue(mockAccount),
+        submitTransaction: jest.fn().mockImplementation(async (tx: any) => {
+          captured.push(tx);
+          return { hash: "deadline-tx-hash", successful: true };
+        }),
+      };
+      service.setHorizonServer(mockHorizonServer);
+
+      const now = Date.now();
+      service.setClock(() => now);
+      const deadline = now + 10_000; // 10s window
+
+      const result = await service.processTrade({
+        portfolioId: "p-166",
+        ticker: "XLM",
+        action: "buy",
+        quantity: 10,
+        price: 0.1,
+        sourceSecret: validSecretKey,
+        deadlineTimestamp: deadline,
+      });
+
+      expect(result.success).toBe(true);
+      expect(captured).toHaveLength(1);
+      // maxTime is the on-chain deadline in epoch seconds; it must not exceed
+      // the caller's deadline, and must still be in the future.
+      const maxTimeSeconds = Number(captured[0].timeBounds.maxTime);
+      expect(maxTimeSeconds).toBeGreaterThan(0);
+      expect(maxTimeSeconds).toBeLessThanOrEqual(Math.floor(deadline / 1000));
+    });
+
+    it("caches the DEADLINE_EXCEEDED failure per clientRequestId like other failure modes", async () => {
+      const request: TradeRequest = {
+        portfolioId: "p-166",
+        ticker: "XLM",
+        action: "buy",
+        quantity: 10,
+        price: 0.1,
+        clientRequestId: "deadline-dup-1",
+        deadlineTimestamp: Date.now() - 5000,
+      };
+
+      const first = await service.processTrade(request);
+      const second = await service.processTrade(request);
+
+      expect(first.errorReason).toBe("DEADLINE_EXCEEDED");
+      expect(second).toBe(first);
+    });
+  });
+
   describe("timed out submission ledger verification", () => {
     it("should check ledger on timeout and confirm if transaction exists on chain", async () => {
       const mockHorizonServer: any = {
         loadAccount: jest.fn().mockResolvedValue(mockAccount),
-        submitTransaction: jest.fn().mockRejectedValue({ message: "timeout error" }),
+        submitTransaction: jest
+          .fn()
+          .mockRejectedValue({ message: "timeout error" }),
         transactions: jest.fn().mockReturnValue({
           transaction: jest.fn().mockReturnValue({
             call: jest.fn().mockResolvedValue({
@@ -174,7 +371,9 @@ describe("TradingTransactionService", () => {
     it("should report TIMED_OUT if transaction is not found on ledger after timeout", async () => {
       const mockHorizonServer: any = {
         loadAccount: jest.fn().mockResolvedValue(mockAccount),
-        submitTransaction: jest.fn().mockRejectedValue({ message: "timeout error" }),
+        submitTransaction: jest
+          .fn()
+          .mockRejectedValue({ message: "timeout error" }),
         transactions: jest.fn().mockReturnValue({
           transaction: jest.fn().mockReturnValue({
             call: jest.fn().mockRejectedValue(new Error("404 Not Found")),

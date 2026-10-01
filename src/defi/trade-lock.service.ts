@@ -133,7 +133,7 @@ export class TradeLockService {
     if (!request.asset) throw new BadRequestException("asset is required");
 
     const decision = this.policyService.evaluateTrade(request);
-    if (!decision.allowed) {
+    if (!decision.allowed && "violation" in decision) {
       throw new BadRequestException({
         error: "Policy violation",
         ...decision.violation,

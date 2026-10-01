@@ -30,6 +30,12 @@ import { PortfolioConstraintService } from "./portfolio-constraint.service";
 import { AuditLogService } from "src/infrastructure/audit/audit-log.service";
 import { SensitiveActionAuditService } from "src/infrastructure/audit/sensitive-actions/sensitive-action-audit.service";
 import { SensitiveAction } from "src/infrastructure/audit/sensitive-actions/sensitive-action.enum";
+import {
+  PortfolioLifecycleState,
+  PortfolioStateMachine,
+  derivePortfolioLifecycleState,
+} from "src/common/lifecycle/record-state-machines";
+import { InvalidStateTransitionException } from "src/common/lifecycle/invalid-state-transition.exception";
 
 @Injectable()
 export class PortfolioService {
@@ -84,24 +90,79 @@ export class PortfolioService {
 
   async archivePortfolio(
     portfolioId: string,
-    status: PortfolioStatus,
+    status: PortfolioStatus = PortfolioStatus.ARCHIVED,
+    auditContext?: { actorId?: string; actorRole?: string; reason?: string },
   ): Promise<Portfolio> {
     const portfolio = await this.getPortfolio(portfolioId);
+    const currentLifecycle = derivePortfolioLifecycleState(portfolio);
+    await PortfolioStateMachine.assertCanTransition(
+      currentLifecycle,
+      PortfolioLifecycleState.ARCHIVED,
+      auditContext,
+      { resourceId: portfolioId, resourceType: "portfolio" },
+    );
+
     const before = this.portfolioSnapshot(portfolio);
-    if (status === PortfolioStatus.ARCHIVED) {
-      portfolio.status = PortfolioStatus.ARCHIVED;
-      portfolio.deletedAt = new Date();
-    }
+    portfolio.status = PortfolioStatus.ARCHIVED;
+    portfolio.deletedAt = new Date();
     const saved = await this.portfolioRepository.save(portfolio);
     await this.recordPortfolioChange(
-      saved.userId,
+      auditContext?.actorId ?? saved.userId,
       "portfolio",
       saved.id,
       before,
       this.portfolioSnapshot(saved),
-      "Portfolio status changed",
+      auditContext?.reason || "Portfolio archived",
     );
     return saved;
+  }
+
+  async transitionPortfolioState(
+    portfolioId: string,
+    targetState: PortfolioLifecycleState | string,
+    auditContext?: { actorId?: string; actorRole?: string; reason?: string },
+  ): Promise<{
+    portfolio: Portfolio;
+    lifecycleState: PortfolioLifecycleState;
+    isTerminal: boolean;
+    allowedTransitions: string[];
+  }> {
+    const portfolio = await this.getPortfolio(portfolioId);
+    const currentLifecycle = derivePortfolioLifecycleState(portfolio);
+    const target = targetState as PortfolioLifecycleState;
+
+    await PortfolioStateMachine.assertCanTransition(
+      currentLifecycle,
+      target,
+      auditContext,
+      { resourceId: portfolioId, resourceType: "portfolio" },
+    );
+
+    const before = this.portfolioSnapshot(portfolio);
+    portfolio.status = target as unknown as PortfolioStatus;
+    if (target === PortfolioLifecycleState.ARCHIVED) {
+      portfolio.deletedAt = new Date();
+    } else {
+      portfolio.deletedAt = null;
+    }
+
+    const saved = await this.portfolioRepository.save(portfolio);
+    await this.recordPortfolioChange(
+      auditContext?.actorId ?? saved.userId,
+      "portfolio",
+      saved.id,
+      before,
+      this.portfolioSnapshot(saved),
+      auditContext?.reason || `Portfolio lifecycle transition: ${currentLifecycle} -> ${target}`,
+    );
+
+    const model = PortfolioStateMachine.deriveStateModel(target);
+    return {
+      portfolio: saved,
+      lifecycleState: target,
+      isTerminal: model.isTerminal,
+      allowedTransitions: model.allowedTransitions,
+    };
   }
 
   async setTargetAllocation(
@@ -192,12 +253,20 @@ export class PortfolioService {
       this.validatePortfolioName(dto.name);
     }
 
-    if (dto.status === PortfolioStatus.ARCHIVED) {
-      portfolio.status = PortfolioStatus.ARCHIVED;
-      portfolio.deletedAt = new Date();
-    } else if (dto.status) {
+    if (dto.status && dto.status !== portfolio.status) {
+      const currentLifecycle = derivePortfolioLifecycleState(portfolio);
+      const targetLifecycle = dto.status as unknown as PortfolioLifecycleState;
+      await PortfolioStateMachine.assertCanTransition(
+        currentLifecycle,
+        targetLifecycle,
+        undefined,
+        { resourceId: portfolioId, resourceType: "portfolio" },
+      );
+
       portfolio.status = dto.status;
-      if (dto.status === PortfolioStatus.ACTIVE) {
+      if (dto.status === PortfolioStatus.ARCHIVED) {
+        portfolio.deletedAt = new Date();
+      } else if (dto.status === PortfolioStatus.ACTIVE) {
         portfolio.deletedAt = null;
       }
     }
@@ -550,7 +619,7 @@ export class PortfolioService {
       ticker: holding.ticker,
       name: holding.name,
       chain: holding.chain,
-      assetType: holding.assetType,
+      assetType: holding.type,
       quantity: holding.quantity,
       currentPrice: holding.currentPrice,
       value: holding.value,

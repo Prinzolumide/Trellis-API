@@ -1,10 +1,12 @@
 import { INestApplication } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
+import { getRepositoryToken } from "@nestjs/typeorm";
 import { Test, TestingModule } from "@nestjs/testing";
 import { createHmac } from "crypto";
 import request from "supertest";
 import { createGlobalValidationPipe } from "src/common/pipes/validation.pipe";
 import { PaymentsModule } from "../payments.module";
+import { PaymentOperation } from "../entities/payment-operation.entity";
 
 /**
  * End-to-end proof that the payment webhook route is closed to anyone who
@@ -37,7 +39,9 @@ function genericSignature(body: string, timestampSeconds: number): string {
  * preserved the payload, where verification must fail rather than fall back to
  * the parsed object.
  */
-async function buildApp(options: { rawBody: boolean }): Promise<INestApplication> {
+async function buildApp(options: {
+  rawBody: boolean;
+}): Promise<INestApplication> {
   const moduleFixture: TestingModule = await Test.createTestingModule({
     imports: [
       ConfigModule.forRoot({
@@ -53,7 +57,17 @@ async function buildApp(options: { rawBody: boolean }): Promise<INestApplication
       }),
       PaymentsModule,
     ],
-  }).compile();
+  })
+    // The webhook routes never touch payment operations; the repository is
+    // only registered in PaymentsModule for the payments lifecycle (#154), so
+    // an in-memory stub keeps this spec focused on signature verification.
+    .overrideProvider(getRepositoryToken(PaymentOperation))
+    .useValue({
+      create: (values: Partial<PaymentOperation>) =>
+        Object.assign(new PaymentOperation(), values),
+      save: async (op: PaymentOperation) => op,
+    })
+    .compile();
 
   const app = moduleFixture.createNestApplication(
     options.rawBody ? { rawBody: true } : {},

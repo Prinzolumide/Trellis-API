@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, NotFoundException, Optional } from "@nestjs/common";
 import {
   billingEstimatedChargesCents,
   billingProrationNetCents,
@@ -155,7 +155,7 @@ export class BillingService {
   private readonly usage = new Map<string, UsageRecord[]>();
   private readonly idempotencyKeys = new Map<string, UsageRecord>();
 
-  constructor(private readonly clock: () => Date = () => new Date()) {}
+  constructor(@Optional() private readonly clock: () => Date = () => new Date()) {}
 
   getPlans(): BillingPlan[] {
     return PLANS.map((plan) => ({ ...plan }));

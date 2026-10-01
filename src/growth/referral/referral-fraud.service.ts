@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 
 /**
  * Referral fraud heuristics (issue #135).
@@ -102,7 +102,7 @@ export class ReferralFraudService {
   /** Users whose referral rewards are unlocked (activity criteria met). */
   private readonly unlockedRewards = new Set<string>();
 
-  constructor(config: ReferralFraudConfig = {}) {
+  constructor(@Optional() config: ReferralFraudConfig = {}) {
     this.subnetThreshold =
       config.subnetSignupThreshold ?? DEFAULT_SUBNET_THRESHOLD;
     this.subnetWindowMs = config.subnetWindowMs ?? DEFAULT_SUBNET_WINDOW_MS;

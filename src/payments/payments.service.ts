@@ -43,7 +43,7 @@ export class PaymentsService {
 
   async createPayment(
     request: PaymentRequest,
-    selector?: string,
+    selector: string | undefined,
     ownerId: string,
   ): Promise<CreatedPayment> {
     const processor = this.factory.resolve(selector);
@@ -130,7 +130,7 @@ export class PaymentsService {
 
   async signTransaction(
     created: CreatedPayment,
-    selector?: string,
+    selector: string | undefined,
     ownerId: string,
   ): Promise<SignedTransaction> {
     const operation = await this.findOperation(created.paymentId, ownerId);
@@ -168,7 +168,7 @@ export class PaymentsService {
 
   async submitTransaction(
     signed: SignedTransaction,
-    selector?: string,
+    selector: string | undefined,
     ownerId: string,
   ): Promise<SubmittedTransaction> {
     const operation = await this.findOperation(signed.paymentId, ownerId);
@@ -190,7 +190,10 @@ export class PaymentsService {
       operation.state = PaymentOperationState.SIGNED;
       await this.operationRepository.save(operation);
     }
-    if (!operation.signedPayload || operation.signedPayload !== signed.signedPayload) {
+    if (
+      !operation.signedPayload ||
+      operation.signedPayload !== signed.signedPayload
+    ) {
       throw new ConflictException(
         "The signed transaction does not match the saved recovery checkpoint.",
       );
@@ -239,7 +242,9 @@ export class PaymentsService {
     }
 
     const submissionHash =
-      operation.transactionHash ?? processor.getSubmissionHash?.(signed) ?? null;
+      operation.transactionHash ??
+      processor.getSubmissionHash?.(signed) ??
+      null;
     if (!interrupted) {
       const claim = await this.operationRepository.update(
         {
@@ -295,7 +300,7 @@ export class PaymentsService {
    */
   async signAndSubmit(
     created: CreatedPayment,
-    selector?: string,
+    selector: string | undefined,
     ownerId: string,
   ): Promise<SubmittedTransaction> {
     const signed = await this.signTransaction(created, selector, ownerId);
@@ -434,10 +439,13 @@ export class PaymentsService {
       if (value && typeof value === "object") {
         return Object.keys(value)
           .sort()
-          .reduce((result, key) => {
-            result[key] = canonicalize(value[key]);
-            return result;
-          }, {} as Record<string, unknown>);
+          .reduce(
+            (result, key) => {
+              result[key] = canonicalize(value[key]);
+              return result;
+            },
+            {} as Record<string, unknown>,
+          );
       }
       return value;
     };
@@ -483,6 +491,8 @@ export class PaymentsService {
   }
 
   private errorMessage(error: unknown): string {
-    return error instanceof Error ? error.message.slice(0, 1000) : "Unknown error";
+    return error instanceof Error
+      ? error.message.slice(0, 1000)
+      : "Unknown error";
   }
 }

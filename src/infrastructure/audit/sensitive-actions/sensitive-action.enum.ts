@@ -71,6 +71,12 @@ export enum SensitiveAction {
 
   // Portfolio ownership and value
   PORTFOLIO_RECORD_CHANGED = "portfolio.record.changed",
+
+  // Core records lifecycle transitions
+  LIFECYCLE_STATE_TRANSITION = "lifecycle.state.transition",
+  PORTFOLIO_STATE_TRANSITION = "portfolio.state.transition",
+  POSITION_STATE_TRANSITION = "defi.position.state.transition",
+  TRANSACTION_STATE_TRANSITION = "transaction.state.transition",
 }
 
 export interface SensitiveActionDefinition {
@@ -281,6 +287,30 @@ export const SENSITIVE_ACTION_CATALOGUE: Record<
   [SensitiveAction.PORTFOLIO_RECORD_CHANGED]: {
     scope: SensitiveActionScope.PORTFOLIO,
     description: "A portfolio or holding affecting ownership or value changed.",
+    reasonRequired: false,
+    capturesState: true,
+  },
+  [SensitiveAction.PORTFOLIO_STATE_TRANSITION]: {
+    scope: SensitiveActionScope.PORTFOLIO,
+    description: "A portfolio transitioned between deterministic lifecycle states.",
+    reasonRequired: false,
+    capturesState: true,
+  },
+  [SensitiveAction.POSITION_STATE_TRANSITION]: {
+    scope: SensitiveActionScope.PROTOCOL_CONFIG,
+    description: "A DeFi position transitioned lifecycle state.",
+    reasonRequired: false,
+    capturesState: true,
+  },
+  [SensitiveAction.TRANSACTION_STATE_TRANSITION]: {
+    scope: SensitiveActionScope.TREASURY,
+    description: "A transaction transitioned lifecycle state.",
+    reasonRequired: false,
+    capturesState: true,
+  },
+  [SensitiveAction.LIFECYCLE_STATE_TRANSITION]: {
+    scope: SensitiveActionScope.COMPLIANCE,
+    description: "A core record underwent a deterministic lifecycle state transition.",
     reasonRequired: false,
     capturesState: true,
   },

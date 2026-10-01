@@ -91,7 +91,7 @@ export class SoftDeleteCascadeSubscriber implements EntitySubscriberInterface<Ob
    * delete the caller was told succeeded, and the retry would be ambiguous.
    * Logging keeps the failure visible and reconcilable.
    */
-  private async cascade(child: ObjectLiteral, parentId: string, relation: string): Promise<void> {
+  private async cascade(child: any, parentId: string, relation: string): Promise<void> {
     const metadata = this.dataSource.getMetadata(child);
     if (!metadata) {
       this.logger.warn(`no metadata for cascade target; skipped ${metadata?.name ?? "unknown"}`);
@@ -114,13 +114,15 @@ export class SoftDeleteCascadeSubscriber implements EntitySubscriberInterface<Ob
       return;
     }
 
+    const joinColName = relationMetadata.joinColumns?.[0]?.databaseName ?? `${relation}Id`;
+
     try {
       const result = await this.dataSource
         .getRepository(metadata.target)
         .createQueryBuilder()
         .update()
         .set({ [metadata.deleteDateColumn.propertyName]: new Date() } as any)
-        .where(`${relationMetadata.joinColumn!.databaseName} = :parentId`, { parentId })
+        .where(`${joinColName} = :parentId`, { parentId })
         .execute();
 
       this.logger.log(

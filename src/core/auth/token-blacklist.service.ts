@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
+import { Injectable, Logger, OnModuleDestroy, Optional } from "@nestjs/common";
 
 /**
  * Redis-backed revocation store for jti replay prevention.
@@ -36,7 +36,7 @@ export class TokenBlacklistService implements OnModuleDestroy {
   private client: RedisLikeClient | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
 
-  constructor(client?: RedisLikeClient | null) {
+  constructor(@Optional() client?: RedisLikeClient | null) {
     this.client = client ?? null;
     this.timer = setInterval(() => this.cleanup(), this.cleanupIntervalMs);
     // Never hold the event loop open for a cleanup timer.

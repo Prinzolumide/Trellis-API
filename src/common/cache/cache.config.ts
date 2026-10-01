@@ -50,8 +50,21 @@ export interface CacheConfig {
 
 /** Default configuration values. */
 export const DEFAULT_CACHE_CONFIG: Required<
-  Omit<CacheConfig, "memoryCache">
-> & { memoryCache?: Map<string, { value: string; expiresAt: number }> } = {
+  Omit<
+    CacheConfig,
+    | "memoryCache"
+    | "sentinels"
+    | "sentinelName"
+    | "enableCluster"
+    | "clusterNodes"
+  >
+> & {
+  memoryCache?: Map<string, { value: string; expiresAt: number }>;
+  sentinels?: SentinelNodeConfig[];
+  sentinelName?: string;
+  enableCluster?: boolean;
+  clusterNodes?: Array<{ host: string; port: number }>;
+} = {
   prefix: "trellis:cache:",
   defaultTtlSeconds: 300,
   memoryMaxEntries: 1000,
